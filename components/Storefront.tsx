@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { products } from "@/lib/products";
 import type { Product } from "@/lib/types";
 import Filters, { FilterState } from "./Filters";
 import Header from "./Header";
@@ -10,15 +9,18 @@ import { ChevronDown, GridIcon, ListIcon } from "./Icons";
 import OrderModal from "./OrderModal";
 import ProductCard from "./ProductCard";
 
-type Sort = "popular" | "price-asc" | "price-desc";
+type Sort = "popular" | "newest" | "price-asc" | "price-desc";
 
 const SORT_LABELS: Record<Sort, string> = {
   popular: "Most Popular",
+  newest: "Newest",
   "price-asc": "Price: Low to High",
   "price-desc": "Price: High to Low",
 };
 
-export default function Storefront() {
+const num = (s: string) => parseInt(s, 10) || 0;
+
+export default function Storefront({ products }: { products: Product[] }) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<FilterState>({
     models: [],
@@ -30,23 +32,40 @@ export default function Storefront() {
   const [active, setActive] = useState<Product | null>(null);
   const [orders, setOrders] = useState(0);
 
+  // Filter options follow whatever the merchant has listed.
+  const modelOptions = useMemo(
+    () =>
+      [...new Set(products.map((p) => p.model))].sort(
+        (a, b) => num(b.replace(/\D+/, "")) - num(a.replace(/\D+/, "")) || a.localeCompare(b)
+      ),
+    [products]
+  );
+  const storageOptions = useMemo(
+    () =>
+      [...new Set(products.map((p) => p.storage))].sort((a, b) => {
+        const size = (s: string) => num(s) * (s.toUpperCase().includes("TB") ? 1024 : 1);
+        return size(a) - size(b);
+      }),
+    [products]
+  );
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = products.filter((p) => {
       if (filters.models.length && !filters.models.includes(p.model)) return false;
       if (filters.storages.length && !filters.storages.includes(p.storage)) return false;
       if (filters.conditions.length && !filters.conditions.includes(p.condition)) return false;
-      if (q && !`${p.model} ${p.color} ${p.storage}`.toLowerCase().includes(q)) return false;
+      if (q && !`${p.model} ${p.colors.join(" ")} ${p.storage}`.toLowerCase().includes(q))
+        return false;
       return true;
     });
-    return list.sort((a, b) =>
-      sort === "price-asc"
-        ? a.price - b.price
-        : sort === "price-desc"
-          ? b.price - a.price
-          : b.popularity - a.popularity
-    );
-  }, [query, filters, sort]);
+    return list.sort((a, b) => {
+      if (sort === "price-asc") return a.price - b.price;
+      if (sort === "price-desc") return b.price - a.price;
+      if (sort === "newest") return b.createdAt.localeCompare(a.createdAt);
+      return b.sold - a.sold || b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [products, query, filters, sort]);
 
   const closeModal = useCallback(() => setActive(null), []);
 
@@ -59,7 +78,12 @@ export default function Storefront() {
           <Hero />
 
           <div className="shop" id="products">
-            <Filters value={filters} onChange={setFilters} />
+            <Filters
+              value={filters}
+              onChange={setFilters}
+              models={modelOptions}
+              storages={storageOptions}
+            />
 
             <section className="shop__main" aria-label="Products">
               <div className="toolbar">
@@ -111,7 +135,11 @@ export default function Storefront() {
                   ))}
                 </div>
               ) : (
-                <p className="empty">No iPhones match those filters yet.</p>
+                <p className="empty">
+                  {products.length
+                    ? "No iPhones match those filters yet."
+                    : "New stock is on its way. Please check back soon."}
+                </p>
               )}
             </section>
           </div>
@@ -122,6 +150,7 @@ export default function Storefront() {
         <OrderModal
           key={active.id}
           product={active}
+          products={products.filter((p) => p.stock > 0)}
           onClose={closeModal}
           onOrdered={() => setOrders((n) => n + 1)}
         />

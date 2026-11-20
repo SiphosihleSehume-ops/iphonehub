@@ -1,13 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { products } from "@/lib/products";
 import { formatRand } from "@/lib/format";
 import type { OrderPayload, OrderResponse, Product } from "@/lib/types";
 import { CheckCircle, CloseIcon } from "./Icons";
 
 interface OrderModalProps {
   product: Product;
+  /** Everything currently in stock, for the iPhone type dropdown */
+  products: Product[];
   onClose: () => void;
   onOrdered: () => void;
 }
@@ -16,19 +17,19 @@ type Errors = Partial<Record<keyof OrderPayload, string>>;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-function validate(v: OrderPayload): Errors {
+function validate(v: OrderPayload, maxQty: number): Errors {
   const e: Errors = {};
   if (v.name.trim().length < 2) e.name = "Enter your first name";
   if (v.surname.trim().length < 2) e.surname = "Enter your surname";
   if (!EMAIL_RE.test(v.email.trim())) e.email = "Enter a valid email address";
   if (v.phone.replace(/[^\d]/g, "").length < 9) e.phone = "Enter a valid phone number";
   if (v.address.trim().length < 8) e.address = "Enter your full delivery address";
-  if (!Number.isInteger(v.quantity) || v.quantity < 1 || v.quantity > 10)
-    e.quantity = "Choose between 1 and 10";
+  if (!Number.isInteger(v.quantity) || v.quantity < 1) e.quantity = "Enter a quantity";
+  else if (v.quantity > maxQty) e.quantity = `Only ${maxQty} in stock`;
   return e;
 }
 
-export default function OrderModal({ product, onClose, onOrdered }: OrderModalProps) {
+export default function OrderModal({ product, products, onClose, onOrdered }: OrderModalProps) {
   const [form, setForm] = useState<OrderPayload>({
     name: "",
     surname: "",
@@ -39,7 +40,7 @@ export default function OrderModal({ product, onClose, onOrdered }: OrderModalPr
     productId: product.id,
     model: product.model,
     storage: product.storage,
-    color: product.color,
+    color: product.colors[0],
     website: "",
   });
   const [errors, setErrors] = useState<Errors>({});
@@ -50,7 +51,7 @@ export default function OrderModal({ product, onClose, onOrdered }: OrderModalPr
 
   const selected = useMemo(
     () => products.find((p) => p.id === form.productId) ?? product,
-    [form.productId, product]
+    [form.productId, product, products]
   );
   const total = selected.price * (Number.isFinite(form.quantity) ? form.quantity : 1);
 
@@ -79,13 +80,14 @@ export default function OrderModal({ product, onClose, onOrdered }: OrderModalPr
       productId: next.id,
       model: next.model,
       storage: next.storage,
-      color: next.colors.includes(f.color) ? f.color : next.color,
+      color: next.colors.includes(f.color) ? f.color : next.colors[0],
+      quantity: Math.min(f.quantity || 1, next.stock),
     }));
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const found = validate(form);
+    const found = validate(form, selected.stock);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
@@ -199,7 +201,7 @@ export default function OrderModal({ product, onClose, onOrdered }: OrderModalPr
                 <select value={form.productId} onChange={(e) => onModelChange(e.target.value)}>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.model} ({p.storage})
+                      {p.model} ({p.storage}, {p.condition})
                     </option>
                   ))}
                 </select>
@@ -215,7 +217,7 @@ export default function OrderModal({ product, onClose, onOrdered }: OrderModalPr
                 <input
                   type="number"
                   min={1}
-                  max={10}
+                  max={selected.stock}
                   value={Number.isFinite(form.quantity) ? form.quantity : ""}
                   onChange={(e) => set("quantity", parseInt(e.target.value, 10))}
                 />

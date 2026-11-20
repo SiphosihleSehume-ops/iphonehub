@@ -1,8 +1,7 @@
-import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { formatRand } from "@/lib/format";
-import { products } from "@/lib/products";
+import { mailConfigured, sendMail } from "@/lib/mail";
+import { getProduct, placeOrder, rollbackOrder } from "@/lib/store";
 import type { OrderPayload, OrderResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -81,7 +80,7 @@ export async function POST(req: Request) {
   const address = clean(raw.address, 250);
   const color = clean(raw.color, 30);
   const quantity = Number(raw.quantity);
-  const product = products.find((p) => p.id === raw.productId);
+  const product = await getProduct(clean(raw.productId, 40));
 
   const fieldErrors: NonNullable<OrderResponse["fieldErrors"]> = {};
   if (name.length < 2) fieldErrors.name = "Enter your first name";
@@ -89,43 +88,54 @@ export async function POST(req: Request) {
   if (!EMAIL_RE.test(email)) fieldErrors.email = "Enter a valid email address";
   if (phone.replace(/\D/g, "").length < 9) fieldErrors.phone = "Enter a valid phone number";
   if (address.length < 8) fieldErrors.address = "Enter your full delivery address";
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10)
-    fieldErrors.quantity = "Choose between 1 and 10";
-  if (!product) return fail(400, { ok: false, error: "That iPhone is no longer available." });
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50)
+    fieldErrors.quantity = "Enter a valid quantity";
+  if (!product || !product.active) {
+    return fail(400, { ok: false, error: "That iPhone is no longer available." });
+  }
   if (!product.colors.includes(color)) fieldErrors.color = "Pick an available colour";
 
   if (Object.keys(fieldErrors).length) {
     return fail(422, { ok: false, error: "Please check the highlighted fields.", fieldErrors });
   }
 
-  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, ORDER_RECEIVER_EMAIL } =
-    process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !ORDER_RECEIVER_EMAIL) {
+  const ORDER_RECEIVER_EMAIL = process.env.ORDER_RECEIVER_EMAIL as string;
+  if (!mailConfigured()) {
     console.error("[order] Mail service is not configured. See .env.example");
     return fail(500, { ok: false, error: "Our order system is temporarily unavailable." });
   }
 
-  const storeName = process.env.STORE_NAME || "iPhoneHub";
-  const port = Number(SMTP_PORT) || 465;
-  const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port,
-    secure: SMTP_SECURE ? SMTP_SECURE === "true" : port === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
+  // Reserve the stock and record the order before emailing anyone.
+  let placed;
+  try {
+    placed = await placeOrder({
+      productId: product.id,
+      color,
+      quantity,
+      name,
+      surname,
+      email,
+      phone,
+      address,
+    });
+  } catch (err) {
+    console.error("[order] could not save order", err);
+    return fail(500, { ok: false, error: "We couldn't save your order. Please try again." });
+  }
+  if (!placed.ok) return fail(409, { ok: false, error: placed.error });
 
-  const reference = `IH-${randomBytes(3).toString("hex").toUpperCase()}`;
-  const total = product.price * quantity;
+  const order = placed.order;
+  const reference = order.id;
   const fullName = `${name} ${surname}`;
-
+  const storeName = process.env.STORE_NAME || "iPhoneHub";
   const orderRows =
     row("Reference", esc(reference)) +
-    row("iPhone", `${esc(product.model)} (${esc(product.storage)})`) +
+    row("iPhone", `${esc(order.model)} (${esc(order.storage)})`) +
     row("Colour", esc(color)) +
     row("Condition", esc(product.condition)) +
     row("Quantity", String(quantity)) +
-    row("Unit price", esc(formatRand(product.price))) +
-    row("Total", esc(formatRand(total)));
+    row("Unit price", esc(formatRand(order.unitPrice))) +
+    row("Total", esc(formatRand(order.total)));
 
   const ownerHtml = layout(
     `New order ${esc(reference)}`,
@@ -134,7 +144,7 @@ export async function POST(req: Request) {
       row("Customer", esc(fullName)) +
       row("Email", `<a href="mailto:${esc(email)}">${esc(email)}</a>`) +
       row("Phone", esc(phone)) +
-      row("Address", esc(address).replace(/\n/g, "<br>")),
+      row("Address", esc(address)),
     "Sent automatically by the storefront order form."
   );
 
@@ -146,31 +156,38 @@ export async function POST(req: Request) {
   );
 
   const text = (heading: string) =>
-    `${heading}\n\nReference: ${reference}\n${product.model} ${product.storage} - ${color}\nQuantity: ${quantity}\nTotal: ${formatRand(total)}\n`;
+    `${heading}\n\nReference: ${reference}\n${order.model} ${order.storage} - ${color}\nQuantity: ${quantity}\nTotal: ${formatRand(order.total)}\n`;
 
   try {
     await Promise.all([
-      transporter.sendMail({
-        from: `"${storeName} Orders" <${SMTP_USER}>`,
-        to: ORDER_RECEIVER_EMAIL,
-        replyTo: `"${fullName}" <${email}>`,
-        subject: `New order ${reference}: ${product.model} x${quantity} (${fullName})`,
-        text:
-          text(`New order from ${fullName}`) +
-          `\nEmail: ${email}\nPhone: ${phone}\nAddress: ${address}\n`,
-        html: ownerHtml,
-      }),
-      transporter.sendMail({
-        from: `"${storeName}" <${SMTP_USER}>`,
-        to: `"${fullName}" <${email}>`,
-        replyTo: ORDER_RECEIVER_EMAIL,
-        subject: `Order confirmation ${reference} | ${storeName}`,
-        text: text(`Thanks for your order, ${name}!`) + `\nWe'll contact you shortly.\n`,
-        html: clientHtml,
-      }),
+      sendMail(
+        {
+          to: ORDER_RECEIVER_EMAIL,
+          replyTo: email,
+          replyToName: fullName,
+          subject: `New order ${reference}: ${order.model} x${quantity} (${fullName})`,
+          text:
+            text(`New order from ${fullName}`) +
+            `\nEmail: ${email}\nPhone: ${phone}\nAddress: ${address}\n`,
+          html: ownerHtml,
+        },
+        `${storeName} Orders`
+      ),
+      sendMail(
+        {
+          to: email,
+          toName: fullName,
+          replyTo: ORDER_RECEIVER_EMAIL,
+          subject: `Order confirmation ${reference} | ${storeName}`,
+          text: text(`Thanks for your order, ${name}!`) + `\nWe'll contact you shortly.\n`,
+          html: clientHtml,
+        },
+        storeName
+      ),
     ]);
   } catch (err) {
     console.error("[order] sendMail failed", err);
+    await rollbackOrder(order.id).catch((e) => console.error("[order] rollback failed", e));
     return fail(502, {
       ok: false,
       error: "We couldn't send your order. Please try again in a moment.",

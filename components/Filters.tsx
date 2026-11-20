@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CONDITION_FILTERS, MODEL_FILTERS, STORAGE_FILTERS } from "@/lib/products";
+import { CONDITIONS } from "@/lib/types";
 import { ChevronUp } from "./Icons";
 
 export interface FilterState {
@@ -13,17 +13,20 @@ export interface FilterState {
 interface FiltersProps {
   value: FilterState;
   onChange: (next: FilterState) => void;
+  /** Built from the products currently on sale, so new models appear automatically */
+  models: string[];
+  storages: string[];
 }
 
 type Group = keyof FilterState;
 
-const GROUPS: { key: Group; title: string; options: readonly string[] }[] = [
-  { key: "models", title: "Model", options: MODEL_FILTERS },
-  { key: "storages", title: "Storage", options: STORAGE_FILTERS },
-  { key: "conditions", title: "Condition", options: CONDITION_FILTERS },
-];
+export default function Filters({ value, onChange, models, storages }: FiltersProps) {
+  const groups: { key: Group; title: string; options: readonly string[] }[] = [
+    { key: "models", title: "Model", options: models },
+    { key: "storages", title: "Storage", options: storages },
+    { key: "conditions", title: "Condition", options: CONDITIONS },
+  ];
 
-export default function Filters({ value, onChange }: FiltersProps) {
   const [collapsed, setCollapsed] = useState<Record<Group, boolean>>({
     models: false,
     storages: false,
@@ -42,7 +45,7 @@ export default function Filters({ value, onChange }: FiltersProps) {
     <aside className="filters" aria-label="Filter products">
       <h2 className="filters__title">Filter Products</h2>
 
-      {GROUPS.map((group) => (
+      {groups.map((group) => (
         <fieldset key={group.key} className="filters__group">
           <legend className="filters__legend">
             <button

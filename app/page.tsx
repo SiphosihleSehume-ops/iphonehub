@@ -1,11 +1,16 @@
+import Footer from "@/components/Footer";
 import Storefront from "@/components/Storefront";
-import TopBar from "@/components/TopBar";
+import { listProducts } from "@/lib/store";
 
-export default function Home() {
+// Always read the latest catalogue so merchant changes show up immediately.
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const products = (await listProducts()).filter((p) => p.active);
   return (
     <>
-      <TopBar />
-      <Storefront />
+      <Storefront products={products} />
+      <Footer />
     </>
   );
 }
