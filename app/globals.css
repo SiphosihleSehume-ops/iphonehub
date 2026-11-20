@@ -1070,4 +1070,14 @@ p {
     height: auto;
   }
 }
+
+/* ---------- stock states (merchant admin) ---------- */
+.card:target {
+  box-shadow: 0 0 0 2px var(--navy), 0 8px 22px rgba(20, 40, 90, 0.12);
+}
+.card { scroll-margin-top: 24px; }
+.card__low { color: #cf680b; font-weight: 700; }
+.card--soldout .card__media img { opacity: 0.45; filter: grayscale(0.6); }
+.btn-navy:disabled { cursor: not-allowed; }
+.card--soldout .btn-navy { background: #9aa3b4; }
 }
