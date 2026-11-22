@@ -9,7 +9,6 @@ import {
   ChevronDown,
   MenuIcon,
   SearchIcon,
-  UserIcon,
 } from "./Icons";
 import InfoModal from "./InfoModal";
 import { AboutContent, ContactContent } from "./SiteDialogs";
@@ -27,6 +26,8 @@ export default function Header({ cartCount = 0, query = "", onQueryChange }: Hea
   const closeDialog = useCallback(() => setDialog(null), []);
   const pathname = usePathname();
 
+  const closeMenu = () => setOpen(false);
+
   const show = (which: "about" | "contact") => {
     setOpen(false);
     setDialog(which);
@@ -36,7 +37,7 @@ export default function Header({ cartCount = 0, query = "", onQueryChange }: Hea
     <>
       <header className="header">
         <div className="header__inner">
-          <Link href="/" className="logo" aria-label="iPhoneHub home">
+          <Link href="/" className="logo" aria-label="Oskido's Electronics home">
             <Image
               src="/images/logo-phone.png"
               alt=""
@@ -45,7 +46,7 @@ export default function Header({ cartCount = 0, query = "", onQueryChange }: Hea
               className="logo__mark"
             />
             <span className="logo__word">
-              Oskido's<span>Electronics</span>
+              Oskido&apos;s <span>Electronics</span>
             </span>
           </Link>
 
@@ -59,10 +60,14 @@ export default function Header({ cartCount = 0, query = "", onQueryChange }: Hea
           </button>
 
           <nav className={`nav ${open ? "nav--open" : ""}`} aria-label="Main">
-            <Link href="/" className={`nav__link ${pathname === "/" ? "nav__link--active" : ""}`}>
+            <Link
+              href="/"
+              className={`nav__link ${pathname === "/" ? "nav__link--active" : ""}`}
+              onClick={closeMenu}
+            >
               Home
             </Link>
-            <Link href="/#products" className="nav__link">
+            <Link href="/#products" className="nav__link" onClick={closeMenu}>
               Shop <ChevronDown width={15} height={15} />
             </Link>
             <button type="button" className="nav__link" onClick={() => show("about")}>
@@ -71,6 +76,7 @@ export default function Header({ cartCount = 0, query = "", onQueryChange }: Hea
             <Link
               href="/faqs"
               className={`nav__link ${pathname === "/faqs" ? "nav__link--active" : ""}`}
+              onClick={closeMenu}
             >
               FAQs
             </Link>
@@ -93,9 +99,6 @@ export default function Header({ cartCount = 0, query = "", onQueryChange }: Hea
           )}
 
           <div className="header__actions">
-            <button className="icon-btn" aria-label="Account">
-              <UserIcon />
-            </button>
             <button className="icon-btn cart-btn" aria-label={`Cart, ${cartCount} items`}>
               <CartIcon />
               {cartCount > 0 && <span className="cart-btn__badge">{cartCount}</span>}

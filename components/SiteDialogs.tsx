@@ -9,7 +9,7 @@ export function AboutContent() {
         Pre-owned iPhones you can trust, at prices that make sense.
       </p>
       <p>
-        Oskido's Electronics started with a simple idea: buying a second-hand iPhone should not feel like a
+        Oskido&apos;s Electronics started with a simple idea: buying a second-hand iPhone should not feel like a
         gamble. Every phone we sell is checked, graded and described honestly, so what you see on the
         page is what arrives at your door.
       </p>
