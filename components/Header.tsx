@@ -45,7 +45,7 @@ export default function Header({ cartCount = 0, query = "", onQueryChange }: Hea
               className="logo__mark"
             />
             <span className="logo__word">
-              iPhone<span>Hub</span>
+              Oskido's<span>Electronics</span>
             </span>
           </Link>
 
