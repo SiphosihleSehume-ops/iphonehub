@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Product } from "@/lib/types";
 import Filters, { FilterState } from "./Filters";
 import Header from "./Header";
 import Hero from "./Hero";
 import { ChevronDown, GridIcon, ListIcon } from "./Icons";
 import OrderModal from "./OrderModal";
+import Pagination from "./Pagination";
 import ProductCard from "./ProductCard";
 
 type Sort = "popular" | "newest" | "price-asc" | "price-desc";
@@ -17,6 +18,8 @@ const SORT_LABELS: Record<Sort, string> = {
   "price-asc": "Price: Low to High",
   "price-desc": "Price: High to Low",
 };
+
+const PAGE_SIZE = 8;
 
 const num = (s: string) => parseInt(s, 10) || 0;
 
@@ -31,6 +34,7 @@ export default function Storefront({ products }: { products: Product[] }) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [active, setActive] = useState<Product | null>(null);
   const [orders, setOrders] = useState(0);
+  const [page, setPage] = useState(1);
 
   // Filter options follow whatever the merchant has listed.
   const modelOptions = useMemo(
@@ -67,6 +71,19 @@ export default function Storefront({ products }: { products: Product[] }) {
     });
   }, [products, query, filters, sort]);
 
+  // Back to page 1 whenever the search, filters or sorting change
+  useEffect(() => setPage(1), [query, filters, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const firstItem = (currentPage - 1) * PAGE_SIZE;
+  const pageItems = visible.slice(firstItem, firstItem + PAGE_SIZE);
+
+  const goToPage = (next: number) => {
+    setPage(next);
+    document.getElementById("products")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const closeModal = useCallback(() => setActive(null), []);
 
   return (
@@ -88,8 +105,9 @@ export default function Storefront({ products }: { products: Product[] }) {
             <section className="shop__main" aria-label="Products">
               <div className="toolbar">
                 <p>
-                  Showing {visible.length ? `1–${visible.length}` : "0"} of {products.length}{" "}
-                  iPhones
+                  Showing{" "}
+                  {visible.length ? `${firstItem + 1}–${firstItem + pageItems.length}` : "0"} of{" "}
+                  {visible.length} iPhones
                 </p>
 
                 <div className="toolbar__right">
@@ -129,11 +147,14 @@ export default function Storefront({ products }: { products: Product[] }) {
               </div>
 
               {visible.length ? (
-                <div className={`grid grid--${view}`}>
-                  {visible.map((p) => (
-                    <ProductCard key={p.id} product={p} onAdd={setActive} />
-                  ))}
-                </div>
+                <>
+                  <div className={`grid grid--${view}`}>
+                    {pageItems.map((p) => (
+                      <ProductCard key={p.id} product={p} onAdd={setActive} />
+                    ))}
+                  </div>
+                  <Pagination page={currentPage} totalPages={totalPages} onChange={goToPage} />
+                </>
               ) : (
                 <p className="empty">
                   {products.length

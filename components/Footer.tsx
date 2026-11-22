@@ -1,4 +1,5 @@
 import { HeadsetSolid, ShieldCheckSolid, TruckSolid } from "./Icons";
+import Link from "next/link";
 
 export default function Footer() {
   return (
@@ -23,7 +24,7 @@ export default function Footer() {
             <a href="#track">Track Order</a>
           </li>
           <li>
-            <a href="#help">Help</a>
+            <Link href="/faqs">Help</Link>
           </li>
         </ul>
       </div>
