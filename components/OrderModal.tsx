@@ -2,8 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { formatRand } from "@/lib/format";
+import { IPHONE_MODELS } from "@/lib/models";
 import type { OrderPayload, OrderResponse, Product } from "@/lib/types";
 import { CheckCircle, CloseIcon } from "./Icons";
+
 
 interface OrderModalProps {
   product: Product;
@@ -53,6 +55,18 @@ export default function OrderModal({ product, products, onClose, onOrdered }: Or
     () => products.find((p) => p.id === form.productId) ?? product,
     [form.productId, product, products]
   );
+
+    // Every model in the range. Models with nothing in stock show greyed out.
+  const modelOptions = useMemo(() => {
+    const byModel = new Map<string, Product[]>();
+    products.forEach((p) => byModel.set(p.model, [...(byModel.get(p.model) ?? []), p]));
+    const known = IPHONE_MODELS.map((m) => ({ model: m, items: byModel.get(m) ?? [] }));
+    const extra = [...byModel.keys()]
+      .filter((m) => !IPHONE_MODELS.includes(m))
+      .map((m) => ({ model: m, items: byModel.get(m) ?? [] }));
+    return [...known, ...extra];
+  }, [products]);
+
   const total = selected.price * (Number.isFinite(form.quantity) ? form.quantity : 1);
 
   useEffect(() => {
@@ -199,11 +213,19 @@ export default function OrderModal({ product, products, onClose, onOrdered }: Or
             <div className="grid3">
               <Field label="iPhone type">
                 <select value={form.productId} onChange={(e) => onModelChange(e.target.value)}>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.model} ({p.storage}, {p.condition})
-                    </option>
-                  ))}
+                  {modelOptions.flatMap(({ model, items }) =>
+                    items.length
+                      ? items.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.model} ({p.storage}, {p.condition})
+                          </option>
+                        ))
+                      : [
+                          <option key={model} disabled>
+                            {model} (out of stock)
+                          </option>,
+                        ]
+                  )}
                 </select>
               </Field>
               <Field label="Colour">
